@@ -1,14 +1,19 @@
-name: Terraform Apply
+name: Terraform Apply + Ansible Deploy
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra/terraform/**'
 
 permissions:
   id-token: write
   contents: read
 
+
 jobs:
   apply:
+    name: Terraform Apply
     runs-on: ubuntu-latest
 
     environment:
@@ -18,9 +23,19 @@ jobs:
       run:
         working-directory: infra/terraform
 
+    outputs:
+      ec2_public_ip: ${{ steps.outputs.outputs.ec2_public_ip }}
+      rds_endpoint: ${{ steps.outputs.outputs.rds_endpoint }}
+      sqs_queue_url: ${{ steps.outputs.outputs.sqs_queue_url }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -28,19 +43,104 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: eu-central-1
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.0
-
       - name: Terraform Init
         run: terraform init -input=false
 
       - name: Terraform Validate
         run: terraform validate
 
+      - name: Terraform Plan
+        run: terraform plan -input=false
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_key_name: ${{ secrets.TF_KEY_NAME }}
+
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false
         env:
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_key_name: ${{ secrets.TF_KEY_NAME }}
+
+      - name: Capture Terraform outputs
+        id: outputs
+        shell: bash
+        run: |
+          echo "ec2_public_ip=$(terraform output -raw compute_public_ip)" >> $GITHUB_OUTPUT
+          echo "rds_endpoint=$(terraform output -raw database_endpoint)" >> $GITHUB_OUTPUT
+          echo "sqs_queue_url=$(terraform output -raw messaging_product_events_queue_url)" >> $GITHUB_OUTPUT
+
+          echo "EC2: $(terraform output -raw compute_public_ip)"
+          echo "RDS: $(terraform output -raw database_endpoint)"
+          echo "SQS: $(terraform output -raw messaging_product_events_queue_url)"
+
+
+  deploy:
+    name: Ansible Deploy
+    needs: apply
+    runs-on: ubuntu-latest
+
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Add EC2 to known hosts
+        run: |
+          ssh-keyscan -H "${{ needs.apply.outputs.ec2_public_ip }}" >> ~/.ssh/known_hosts
+
+      - name: Create inventory
+        run: |
+          mkdir -p ansible/inventory
+          cat > ansible/inventory/hosts.ini <<EOF
+          [web_servers]
+          ec2 ansible_host=${{ needs.apply.outputs.ec2_public_ip }} ansible_user=ec2-user ansible_ssh_private_key_file=~/.ssh/id_rsa
+
+          [all:vars]
+          ansible_python_interpreter=/usr/bin/python3
+          EOF
+
+      - name: Run EC2 configuration
+        run: |
+          ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/configure-ec2.yml
+
+      - name: Deploy application
+        run: |
+          ansible-playbook -i ansible/inventory/hosts.ini ansible/playbooks/deploy-app.yml \
+            --extra-vars "rds_endpoint=${{ needs.apply.outputs.rds_endpoint }} \
+            db_password=${{ secrets.DB_PASSWORD }} \
+            sqs_queue_url=${{ needs.apply.outputs.sqs_queue_url }}"
+
+      - name: Health check
+        shell: bash
+        run: |
+          EC2=${{ needs.apply.outputs.ec2_public_ip }}
+
+          for port in 8080 8081 8082 8083; do
+            echo "Checking $port..."
+            curl -sf "http://$EC2:$port/actuator/health" || echo "Service $port not ready"
+          done
+
+
+  notify:
+    name: Notify Failure
+    needs: [apply, deploy]
+    runs-on: ubuntu-latest
+    if: failure()
+
+    steps:
+      - name: Report
+        run: |
+          echo "❌ Deployment failed"
+          echo "Apply: ${{ needs.apply.result }}"
+          echo "Deploy: ${{ needs.deploy.result }}"

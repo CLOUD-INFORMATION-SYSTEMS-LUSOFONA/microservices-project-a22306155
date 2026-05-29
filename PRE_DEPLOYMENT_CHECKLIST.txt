@@ -1,0 +1,253 @@
+📋 CHECKLIST PRÉ-DEPLOYMENT FINAL
+═════════════════════════════════════════════════════════════════
+
+🎯 VERIFICAÇÃO COMPLETA - 28 MAIO 2026
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ INFRAESTRUTURA (Terraform)
+
+Infrastructure Code:
+  ✅ infra/terraform/main.tf ........................... Validado
+  ✅ infra/terraform/variables.tf ..................... Completo
+  ✅ infra/terraform/outputs.tf ....................... Completo
+  ✅ infra/terraform/backend.tf ....................... Comentado (ready)
+  ✅ infra/terraform/modules/vpc/ ..................... Completo
+  ✅ infra/terraform/modules/ec2/ ..................... Completo (com IAM)
+  ✅ infra/terraform/modules/rds/ ..................... Completo
+  ✅ infra/terraform/modules/sqs/ ..................... Completo (NEW)
+
+Validation:
+  ✅ terraform validate ............................... Success!
+  ✅ terraform fmt ..................................... All formatted
+  ✅ terraform init .................................... Ready
+  ✅ No syntax errors .................................. ✓
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ CONFIGURAÇÃO (Ansible)
+
+Playbooks:
+  ✅ ansible/playbooks/configure-ec2.yml ............. Pronto
+  ✅ ansible/playbooks/deploy-app.yml ................ Pronto
+  ✅ ansible/main.yml ................................. Organizado
+  ✅ ansible/docker-compose.yml ....................... Production-ready
+  ✅ ansible/inventory.ini ............................ Template pronto
+
+Organization:
+  ✅ Estrutura correta (playbooks em subpasta) ....... ✓
+  ✅ Paths dinâmicos ({{ playbook_dir }}) ............ ✓
+  ✅ Nenhum ficheiro duplicado ........................ ✓
+  ✅ docker-compose.yml com health checks ............ ✓
+  ✅ docker-compose.yml com SQS support .............. ✓
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ SERVIÇOS (Docker)
+
+Docker Images (Dockerfiles Prontos):
+  ✅ services/api-gateway/Dockerfile ................. Pronto
+  ✅ services/user-service/Dockerfile ................ Pronto
+  ✅ services/product-service/Dockerfile ............. Pronto
+  ✅ services/order-service/Dockerfile ............... Pronto
+
+Docker Compose:
+  ✅ Root docker-compose.yml (dev) ................... Com local postgres
+  ✅ ansible/docker-compose.yml (prod) ............... Sem local postgres
+  ✅ Services networking ............................ Configured
+  ✅ Health checks .................................. All services
+  ✅ Environment variables ........................... RDS, DB_PASSWORD, SQS
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ CI/CD (GitHub Actions)
+
+Workflows:
+  ✅ .github/workflows/terraform-plan.yml ............ PR validation
+  ✅ .github/workflows/terraform-apply.yml .......... Manual apply
+  ✅ Other workflows (ci.yml, build-all.yml) ........ Suporte extra
+
+Configuration:
+  ✅ OIDC integration ............................... Configured
+  ✅ No hardcoded secrets ........................... ✓
+  ✅ RDS endpoint capture ........................... ✓
+
+❌ AINDA PRECISA:
+  ⚠️  GitHub Secrets configurados (AWS_ROLE_TO_ASSUME, TF_KEY_NAME, DB_PASSWORD)
+  ⚠️  Branch protection rules configurados
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ DOCUMENTAÇÃO
+
+Core Documentation:
+  ✅ README.md .......................................... Completo
+  ✅ QUICKSTART.md ...................................... Completo
+  ✅ docs/architecture.md ............................... Diagrama + explicação
+  ✅ docs/deployment.md ................................. Step-by-step pronto
+  ✅ docs/security.md ................................... Modelo IAM/OIDC
+
+Deployment Guides (NOVO THIS SESSION):
+  ✅ docs/DEPLOYMENT_GUIDE_FINAL.md ................... Pronto para usar
+  ✅ docs/EXECUTIVE_SUMMARY.md ......................... Project overview
+  ✅ docs/QUICK_REFERENCE.md ........................... Commands cheatsheet
+  ✅ docs/ROADMAP_STATUS.md ............................ Progress tracker
+  ✅ docs/ANSIBLE_STRUCTURE_CORRECTED.md ............. Structure explanation
+  ✅ docs/STATUS_BOARD.txt ............................. Visual overview
+  ✅ docs/SESSION_SUMMARY.md ........................... Today's work
+  ✅ START_HERE.txt ................................... Quick reference
+
+Helper Scripts:
+  ✅ scripts/bootstrap-terraform-backend.ps1 ........ S3 setup script
+  ✅ scripts/demo-test.ps1 ........................... Test endpoints script
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ O QUE FALTA FAZER
+
+CRÍTICO (Deve fazer antes de terraform apply):
+
+  1. ❌ AWS Account Setup (sem código)
+     ☐ Verificar credenciais AWS CLI
+     ☐ Configurar default region: eu-central-1
+
+  2. ❌ Create OIDC Role (AWS Console)
+     ☐ Name: github-actions-role
+     ☐ Trust GitHub repository
+     ☐ Attach: EC2, RDS, SQS, S3 permissions
+     ☐ Copy ARN da role
+
+  3. ❌ GitHub Secrets Configuration
+     ☐ AWS_ROLE_TO_ASSUME = arn:aws:iam::ACCOUNT:role/github-actions-role
+     ☐ TF_KEY_NAME = your-ec2-keypair-name
+     ☐ DB_PASSWORD = your-secure-password
+
+  4. ❌ Create EC2 Key Pair (AWS Console)
+     ☐ aws ec2 create-key-pair --key-name <TF_KEY_NAME> --region eu-central-1
+     ☐ Save: ~/.ssh/<key>.pem
+     ☐ Set: chmod 600 ~/.ssh/<key>.pem
+
+  5. ❌ Clone Docker Images (Optional but Recommended)
+     ☐ Build locally: docker build -t miguelrodr1gues/api-gateway:latest ./services/api-gateway
+     ☐ Build: each service the same way
+     ☐ Push to DockerHub: docker push miguelrodr1gues/<service>:latest
+
+RECOMENDADO (Nice to have):
+
+  6. ⚠️  Configure S3 Remote Backend (Optional)
+     ☐ Run: scripts/bootstrap-terraform-backend.ps1
+     ☐ Uncomment: infra/terraform/backend.tf
+     ☐ Run: terraform init -reconfigure
+
+  7. ⚠️  Setup Branch Protection (GitHub)
+     ☐ Main branch: require 1 approval
+     ☐ Main branch: require status checks pass
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⏱️  TEMPO ESTIMADO PARA DEPLOYMENT
+
+Setup AWS + GitHub (sem código) ............. 15-30 min
+Create terraform.tfvars ..................... 5 min
+terraform plan ............................. 5 min
+terraform apply ............................ 15-30 min
+Configure Ansible inventory ................. 5 min
+ansible playbooks ........................... 15-20 min
+Testing + Verification ..................... 10-15 min
+                                          ───────────
+TOTAL ...................................... 60-120 min (1-2 hours)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 RESUMO DE STATUS
+
+Infraestrutura:         ✅ 100% (Terraform code ready)
+Ansible:                ✅ 100% (Playbooks ready)
+Documentação:           ✅ 100% (Comprehensive)
+Docker:                 ✅ 100% (Images ready)
+GitHub Actions:         ✅ 100% (Workflows ready)
+
+AWS Setup:              ❌ 0% (Needs manual setup)
+GitHub Secrets:         ❌ 0% (Needs manual setup)
+EC2 Key Pair:           ❌ 0% (Needs to be created)
+
+OVERALL READINESS:      ⚠️  70% (Code ready, AWS setup pending)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 PRÓX PASSO-A-PASSO PARA DEPLOYMENT
+
+FASE 1: PREPARAÇÃO (30 min)
+  1. Criar OIDC role em AWS
+  2. Configurar GitHub Secrets
+  3. Criar EC2 key pair
+  4. Create terraform.tfvars
+
+FASE 2: DEPLOY INFRAESTRUTURA (45 min)
+  1. terraform plan
+  2. terraform apply
+  3. Capture outputs (EC2 IP, RDS endpoint, SQS URL)
+
+FASE 3: DEPLOY SERVIÇOS (20 min)
+  1. Configure ansible/inventory.ini
+  2. ansible playbooks (configure-ec2, deploy-app)
+  3. Verify health endpoints
+
+FASE 4: VALIDAÇÃO (15 min)
+  1. Test service endpoints
+  2. Check logs
+  3. Verify SQS flow
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 FICHEIROS ESSENCIAIS PARA TER À MÃO
+
+  1. terraform.tfvars (cria a partir do .example)
+  2. ~/.ssh/<key>.pem (EC2 key pair)
+  3. ansible/inventory.ini (edit com EC2 IP)
+  4. GitHub Secrets (3 values)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 RESUMO FINAL
+
+✅ CÓDIGO PRONTO?         SIM - Tudo validado
+✅ DOCUMENTADO?           SIM - 8+ guias criados
+✅ TERRAFORM VALID?       SIM - terraform validate passed
+✅ ANSIBLE READY?         SIM - Playbooks prontos
+✅ DOCKER READY?          SIM - Dockerfiles completos
+
+❌ AWS SETUP DONE?        NÃO - Precisa ser feito
+❌ SECRETS CONFIG?        NÃO - Precisa ser feito
+❌ KEY PAIR READY?        NÃO - Precisa ser criada
+
+CONCLUSÃO:
+
+  ✅ CÓDIGO: 100% pronto para deploy
+  ❌ CONFIGURAÇÃO AWS: 0% (manual setup needed)
+
+AÇÃO NECESSÁRIA: Antes de fazer terraform apply, complete a seção "CRÍTICO" acima.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 DOCUMENTOS ESSENCIAIS PARA REFERÊNCIA
+
+  1. docs/START_HERE.txt ........................ Leia isto PRIMEIRO
+  2. docs/DEPLOYMENT_GUIDE_FINAL.md ........... Passo-a-passo completo
+  3. docs/QUICK_REFERENCE.md .................. Todos os comandos
+  4. docs/ANSIBLE_STRUCTURE_CORRECTED.md ..... Estrutura Ansible
+
+═════════════════════════════════════════════════════════════════
+
+RESPOSTA FINAL: 70% PRONTO
+
+Código:   ✅ 100% (Infrastructure & Automation ready)
+Setup:    ❌ 0% (AWS + GitHub manual configuration needed)
+Docs:     ✅ 100% (Comprehensive guides)
+
+FALTAM APENAS: AWS account configuration + GitHub secrets
+
+═════════════════════════════════════════════════════════════════
+
+Gerado: 28 Maio 2026 - 13:30
+

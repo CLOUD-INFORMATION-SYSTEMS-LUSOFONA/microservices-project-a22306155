@@ -72,7 +72,7 @@ variable "private_subnet_cidrs" {
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "t3.micro"
+  default     = "t3.small"
 
   validation {
     condition     = contains(["t2.micro", "t3.micro", "t3.small", "t3.medium"], var.instance_type)
@@ -83,6 +83,7 @@ variable "instance_type" {
 variable "key_name" {
   description = "AWS key pair name for EC2 access"
   type        = string
+  default     = "miguelrodr1"
 }
 
 variable "allowed_ports" {
@@ -150,6 +151,7 @@ variable "db_password" {
   description = "Database master password"
   type        = string
   sensitive   = true
+  default     = "dr1gues103"
 }
 
 variable "db_instance_class" {

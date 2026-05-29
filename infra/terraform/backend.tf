@@ -1,18 +1,15 @@
-/*
-  Backend configuration example. For production use, configure an S3 backend
-  with DynamoDB for state locking. This file is intentionally left as an
-  example and commented out so `terraform init` will not fail.
-
-  Example:
-
-  terraform {
-    backend "s3" {
-      bucket         = "my-terraform-state-bucket"
-      key            = "project/terraform.tfstate"
-      region         = "eu-central-1"
-      dynamodb_table = "terraform-locks"
-      encrypt        = true
-    }
+terraform {
+  # Remote state backend configured with S3
+  backend "s3" {
+    bucket         = "terraform-state-cloud-project-753"
+    key            = "cloud-project/terraform.tfstate"
+    region         = "eu-central-1"
+    encrypt        = true
+    # dynamodb_table = "terraform-locks"  # Optional: Create DynamoDB table if IAM permits
   }
-*/
 
+  # For local development without remote state, use local backend:
+  # backend "local" {
+  #   path = "terraform.tfstate"
+  # }
+}

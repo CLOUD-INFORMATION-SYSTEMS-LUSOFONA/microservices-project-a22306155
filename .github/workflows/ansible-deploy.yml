@@ -1,0 +1,77 @@
+name: CI/CD Deploy Microservices
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - api-gateway
+          - user-service
+          - product-service
+          - order-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/${{ matrix.service }}
+          push: true
+          tags: |
+            miguelrodr1gues/${{ matrix.service }}:latest
+            miguelrodr1gues/${{ matrix.service }}:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/key.pem
+          chmod 600 ~/.ssh/key.pem
+
+      - name: Deploy to EC2 via Ansible
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/key.pem ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+
+            docker network create microservices-net || true
+
+            docker pull miguelrodr1gues/api-gateway:latest
+            docker pull miguelrodr1gues/user-service:latest
+            docker pull miguelrodr1gues/product-service:latest
+            docker pull miguelrodr1gues/order-service:latest
+
+            docker stop api-gateway || true && docker rm api-gateway || true
+            docker stop user-service || true && docker rm user-service || true
+            docker stop product-service || true && docker rm product-service || true
+            docker stop order-service || true && docker rm order-service || true
+
+            docker run -d --name user-service --network microservices-net -p 8081:8080 miguelrodr1gues/user-service:latest
+            docker run -d --name product-service --network microservices-net -p 8082:8080 miguelrodr1gues/product-service:latest
+            docker run -d --name order-service --network microservices-net -p 8083:8080 miguelrodr1gues/order-service:latest
+            docker run -d --name api-gateway --network microservices-net -p 8080:8080 miguelrodr1gues/api-gateway:latest
+
+          EOF

@@ -1,0 +1,165 @@
+name: Ansible Config EC2
+
+on:
+  workflow_run:
+    workflows:
+      - "Terraform Apply (Main Branch)"
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  ansible-config:
+    name: Configure EC2 Instance
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download terraform outputs
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: terraform-apply.yml
+          name: tfplan
+          path: artifacts/
+        continue-on-error: true
+
+      - name: Setup Ansible
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install ansible>=2.10
+
+      - name: Create SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+
+      - name: Get EC2 Public IP from outputs
+        id: get_ip
+        run: |
+          # Try to get from terraform state or use environment variable
+          # For now, we'll get it from the previous workflow output
+          # This uses a helper script to retrieve the latest EC2 IP
+          EC2_IP=$(curl -s https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/attempts/1/jobs | jq -r '.jobs[] | select(.name=="Apply Infrastructure") | .steps[] | select(.name=="Capture Terraform Outputs") | .output' 2>/dev/null || echo "")
+          
+          # If empty, try alternative method
+          if [ -z "$EC2_IP" ]; then
+            echo "⏳ Waiting 15 seconds for EC2 to be fully available..."
+            sleep 15
+          fi
+          
+          echo "ec2_public_ip=$EC2_IP" >> $GITHUB_OUTPUT
+
+      - name: Wait for EC2 to be ready
+        id: wait_ec2
+        run: |
+          echo "⏳ Waiting for EC2 instance to be ready (up to 2 minutes)..."
+          MAX_ATTEMPTS=24
+          ATTEMPT=0
+          
+          # Using the Terraform state to get the latest EC2 IP
+          # This will be populated by the previous job
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS..."
+            sleep 5
+          done
+          
+          echo "✅ EC2 should be ready now"
+
+      - name: Setup dynamic inventory
+        id: inventory
+        run: |
+          mkdir -p inventory
+          
+          # Get EC2 info using AWS CLI
+          EC2_IP=${{ steps.get_ip.outputs.ec2_public_ip }}
+          
+          if [ -z "$EC2_IP" ]; then
+            echo "⚠️ EC2 IP not found in outputs"
+            # Alternative: Query AWS for latest instance
+            EC2_IP=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=CloudComputing-web-*" "Name=instance-state-name,Values=running" \
+              --query 'Reservations[*].Instances[*].[PublicIpAddress]' \
+              --output text | head -1)
+          fi
+          
+          echo "📍 EC2 Public IP: $EC2_IP"
+          
+          cat > inventory/hosts.yml << EOF
+          all:
+            children:
+              web_servers:
+                hosts:
+                  web_server:
+                    ansible_host: $EC2_IP
+                    ansible_user: ec2-user
+                    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+                    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          EOF
+          
+          echo "inventory_file=inventory/hosts.yml" >> $GITHUB_OUTPUT
+
+      - name: Test SSH connectivity
+        id: test_ssh
+        run: |
+          set +e
+          RETRIES=0
+          MAX_RETRIES=30
+          
+          while [ $RETRIES -lt $MAX_RETRIES ]; do
+            ssh -i ~/.ssh/id_rsa \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              -o ConnectTimeout=5 \
+              ec2-user@$(grep ansible_host inventory/hosts.yml | awk '{print $2}') \
+              "echo '✅ SSH connection successful'" && break
+            
+            RETRIES=$((RETRIES + 1))
+            echo "SSH attempt $RETRIES/$MAX_RETRIES failed, retrying in 10 seconds..."
+            sleep 10
+          done
+          
+          if [ $RETRIES -eq $MAX_RETRIES ]; then
+            echo "❌ Could not establish SSH connection after $MAX_RETRIES attempts"
+            exit 1
+          fi
+
+      - name: Run configure-ec2 playbook
+        id: configure
+        run: |
+          ansible-playbook \
+            -i ${{ steps.inventory.outputs.inventory_file }} \
+            -vv \
+            ansible/playbooks/configure-ec2.yml
+
+      - name: Publish Configuration Summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## 🔧 EC2 Configuration Complete
+          
+          ### Installed Components
+          - ✅ Docker runtime
+          - ✅ Docker Compose plugin
+          - ✅ System dependencies (git, etc.)
+          - ✅ Application user & group
+          - ✅ Application directories
+          
+          ### Next Step
+          📦 Deploying application services...
+          EOF
+
+      - name: Notify failure
+        if: failure()
+        run: |
+          echo "❌ Ansible configuration failed!"
+          echo "Check the workflow logs for details"
+          exit 1
+

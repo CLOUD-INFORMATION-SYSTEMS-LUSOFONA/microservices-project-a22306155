@@ -53,3 +53,18 @@ output "database_port" {
   value       = module.database.port
 }
 
+output "messaging_product_events_queue_url" {
+  description = "SQS product events queue URL (Standard)"
+  value       = module.messaging.product_events_queue_url
+}
+
+output "messaging_product_events_dlq_url" {
+  description = "SQS product events Dead Letter Queue URL"
+  value       = module.messaging.product_events_dlq_url
+}
+
+output "messaging_product_events_fifo_queue_url" {
+  description = "SQS product events queue URL (FIFO)"
+  value       = module.messaging.product_events_fifo_queue_url
+}
+

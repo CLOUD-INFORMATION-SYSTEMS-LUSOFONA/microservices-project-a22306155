@@ -88,3 +88,19 @@ module "database" {
   tags                       = local.common_tags
 }
 
+module "messaging" {
+  source                       = "./modules/sqs"
+  environment                  = local.workspace_name
+  project_name                 = var.project_name
+  max_receive_count_before_dlq = 3
+  tags                         = local.common_tags
+}
+
+# Attach SQS policy to EC2 instance role
+resource "aws_iam_role_policy_attachment" "ec2_sqs_access" {
+  role       = module.compute.iam_role_name
+  policy_arn = module.messaging.sqs_access_policy_arn
+}
+
+
+

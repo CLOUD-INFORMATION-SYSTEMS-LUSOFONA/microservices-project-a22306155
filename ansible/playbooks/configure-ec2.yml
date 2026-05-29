@@ -1,0 +1,12 @@
+---
+- name: Configure Servers
+  hosts: all
+  become: true
+
+  vars:
+    docker_users:
+      - ec2-user
+      - app-user
+
+  roles:
+    - docker

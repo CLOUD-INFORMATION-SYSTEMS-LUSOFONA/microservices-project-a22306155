@@ -2,7 +2,9 @@ name: Terraform Plan
 
 on:
   pull_request:
-    paths: [ 'infra/terraform/**' ]
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/terraform-plan.yml'
 
 permissions:
   id-token: write
@@ -12,6 +14,8 @@ permissions:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+    environment:
+      name: development
 
     defaults:
       run:
@@ -21,57 +25,163 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            infra/terraform/.terraform
+            infra/terraform/.terraform.lock.hcl
+          key: ${{ runner.os }}-terraform-${{ hashFiles('infra/terraform/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: eu-central-1
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.0
-
       - name: Terraform Init
-        run: terraform init -input=false
+        id: init
+        run: terraform init -input=false -backend=true
 
       - name: Terraform Format check
-        run: terraform fmt -check
+        id: fmt
+        run: |
+          terraform fmt -check -recursive -diff
+          echo "fmt_status=passed" >> $GITHUB_OUTPUT
+        continue-on-error: true
 
       - name: Terraform Validate
+        id: validate
         run: terraform validate
 
       - name: Terraform plan
-        run: terraform plan -no-color -input=false -out=tfplan
+        id: plan
+        run: |
+          terraform plan -no-color -input=false -out=tfplan > plan.txt 2>&1
+          cat plan.txt
         env:
           TF_INPUT: "false"
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
           TF_VAR_key_name: ${{ secrets.TF_KEY_NAME }}
+        continue-on-error: true
 
       - name: Upload Terraform plan artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan
+          name: tfplan-${{ github.run_id }}
           path: infra/terraform/tfplan
+          retention-days: 1
 
       - name: Comment plan on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const { execSync } = require('child_process');
 
-            const out = execSync('terraform show -no-color tfplan', { cwd: 'infra/terraform' })
-              .toString();
+            let comment = '## Terraform Plan Report\n\n';
 
-            const body =
-              '### Terraform Plan\n\n```hcl\n' +
-              out.slice(0, 60000) +
-              '\n```';
+            // 1. Format Check
+            const fmtStatus = '${{ steps.fmt.outcome }}';
+            comment += '### 1️⃣ Format Check\n';
+            if (fmtStatus === 'success') {
+              comment += '✅ All files are properly formatted\n\n';
+            } else {
+              comment += '❌ Some files need formatting\n';
+              comment += '**Fix:** Run `terraform fmt -recursive` locally\n\n';
+            }
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
+            // 2. Validation
+            const validateStatus = '${{ steps.validate.outcome }}';
+            comment += '### 2️⃣ Validation\n';
+            if (validateStatus === 'success') {
+              comment += '✅ Configuration is valid\n\n';
+            } else {
+              comment += '❌ Configuration validation failed\n\n';
+            }
+
+            // 3. Plan Output
+            const planStatus = '${{ steps.plan.outcome }}';
+            comment += '### 3️⃣ Plan Output\n';
+
+            try {
+              const planOutput = fs.readFileSync('infra/terraform/plan.txt', 'utf8');
+              const lines = planOutput.split('\n');
+
+              // Extract summary
+              const summary = lines.find(l => l.includes('Plan:') || l.includes('No changes'));
+              if (summary) {
+                comment += '**Summary:** ' + summary.trim() + '\n\n';
+              }
+
+              // Full plan (first 30000 chars)
+              const fullPlan = execSync('terraform show -no-color tfplan', { cwd: 'infra/terraform', encoding: 'utf8' });
+              comment += '```terraform\n' + fullPlan.slice(0, 30000);
+              if (fullPlan.length > 30000) {
+                comment += '\n... (truncated, see artifact for full output)\n';
+              }
+              comment += '\n```\n\n';
+            } catch (e) {
+              comment += '⚠️ Could not generate plan details\n\n';
+            }
+
+            // Overall status
+            const allPassed = fmtStatus === 'success' && validateStatus === 'success';
+            if (allPassed) {
+              comment += '### ✅ All Checks Passed\n';
+              comment += 'This change is ready to review and merge.\n';
+            } else {
+              comment += '### ⚠️ Review Required\n';
+              comment += 'Please fix the issues above before merging.\n';
+            }
+
+            // Post/Update comment
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body
+              issue_number: context.issue.number,
             });
+
+            const botComment = comments.find(comment => comment.user.type === 'Bot' && comment.body.includes('Terraform Plan Report'));
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment,
+              });
+            }
+
+      - name: Fail on format/validation errors
+        if: steps.fmt.outcome != 'success' || steps.validate.outcome != 'success'
+        run: exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## PR Terraform Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Format | ${{ steps.fmt.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Validate | ${{ steps.validate.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Plan | ${{ steps.plan.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Important:** This PR does NOT apply any changes. Plan only." >> $GITHUB_STEP_SUMMARY

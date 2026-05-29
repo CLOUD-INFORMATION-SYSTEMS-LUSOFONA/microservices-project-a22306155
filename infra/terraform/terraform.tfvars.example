@@ -1,0 +1,37 @@
+# Terraform Variables Example
+# Copy this file to `terraform.tfvars` and fill in your actual values
+# IMPORTANT: Never commit terraform.tfvars with real secrets to Git
+
+project_name = "CloudComputing"
+aws_region   = "eu-central-1"
+
+# EC2 Configuration
+instance_type = "t3.micro"
+key_name      = "miguelrodr1"  # Replace with your AWS key pair name
+
+# VPC Configuration (optional — defaults are fine for most cases)
+# vpc_cidr                = "10.8.0.0/16"
+# public_subnet_cidrs     = ["10.8.1.0/24", "10.8.2.0/24"]
+# private_subnet_cidrs    = ["10.8.10.0/24", "10.8.11.0/24"]
+# azs                     = ["eu-central-1a", "eu-central-1b"]
+
+# Security Configuration
+allowed_ports        = [22, 80, 443, 8080, 8081, 8082, 8083]  # SSH, HTTP, HTTPS, App ports
+allowed_cidr_blocks  = ["0.0.0.0/0"]  # WARNING: Open to all IPs — restrict in production
+
+# RDS Database Configuration
+db_name             = "cloudprojectdb"
+db_username         = "dr1gues"
+db_password         = "ChangeMe123!@#"  # IMPORTANT: Use a strong random password; do NOT commit this
+db_instance_class   = "db.t3.micro"
+db_engine           = "postgres"
+db_engine_version   = "17"
+db_port             = 5432
+
+# Additional Tags (optional)
+additional_tags = {
+  Owner       = "Miguel"
+  CostCenter  = "Education"
+  Terraform   = "true"
+}
+

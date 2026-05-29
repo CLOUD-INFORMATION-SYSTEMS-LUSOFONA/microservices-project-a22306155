@@ -1,6 +1,15 @@
+data "aws_iam_role" "ec2_role" {
+  name = "EC2S3AccessRole"
+}
+
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "cloud-project-ec2-profile-${var.tags["Environment"]}"
+  role = data.aws_iam_role.ec2_role.name
+}
+
 resource "aws_security_group" "this" {
   name        = lower("cloud-project-web-sg")
-  description = "Security group for the Week 8 EC2 instance"
+  description = "Security group for the EC2 instance"
   vpc_id      = var.vpc_id
 
   dynamic "ingress" {
@@ -36,8 +45,9 @@ resource "aws_instance" "this" {
   user_data                   = var.user_data
   user_data_replace_on_change = true
 
+  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
+
   tags = merge(var.tags, {
     Name = "cloud-project-instance"
   })
 }
-

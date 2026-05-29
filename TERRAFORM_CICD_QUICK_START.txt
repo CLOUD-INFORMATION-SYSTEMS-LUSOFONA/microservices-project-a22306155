@@ -1,0 +1,221 @@
+🎯 TERRAFORM CI/CD PIPELINE - QUICK START
+═════════════════════════════════════════════════════════════════
+
+⚡ 30 SEGUNDOS PARA ENTENDER
+
+Antes: Manual terraform apply (propenso a erros)
+Depois: Automático via Git push (seguro & rastreável)
+
+═════════════════════════════════════════════════════════════════
+
+📋 WORKFLOW SIMPLES
+
+1. Código Muda em infra/terraform/
+
+2. Abres Pull Request (PR)
+   └─ GitHub Actions automático:
+      ✅ terraform fmt -check
+      ✅ terraform validate
+      ✅ terraform plan
+      └─ Comenta no PR com resultado
+   └─ Se falhar → Can't merge
+   └─ If OK → Ready to review
+
+3. Merge PR para main
+   └─ GitHub Actions automático:
+      ✅ terraform apply (SEM -auto-aprove em produção real)
+      ❌ Apply só acontece em main (nunca em branches)
+
+═════════════════════════════════════════════════════════════════
+
+🔐 SEGURANÇA BUILT-IN
+
+✅ Só roda em main branch (verificação dentro workflow)
+✅ PR bloqueado se testes falham
+✅ OIDC: Sem AWS keys em GitHub
+✅ SSH key: Criado em runtime (não committed)
+✅ Backend: S3 remote + DynamoDB locking
+
+═════════════════════════════════════════════════════════════════
+
+🎬 PASSO-A-PASSO
+
+1. SETUP (UMA VEZ)
+   ├─ You: Adicionar 4 secrets no GitHub
+   │  ├─ AWS_ROLE_TO_ASSUME
+   │  ├─ TF_KEY_NAME
+   │  ├─ DB_PASSWORD
+   │  └─ SSH_PRIVATE_KEY
+   │
+   └─ Me: Já configurei os workflows
+      ├─ .github/workflows/terraform-plan.yml ✅
+      └─ .github/workflows/terraform-apply.yml ✅
+
+2. DEVELOPER WORKFLOW
+
+   a) Feature branch
+      git checkout -b feature/add-new-service
+      vim infra/terraform/main.tf (faz mudanças)
+      git commit -m "add new service"
+      git push
+
+   b) GitHub (automático)
+      PR aberto
+         ↓
+      terraform-plan.yml trigger
+         ↓
+      ✅ fmt check
+      ✅ validate
+      ✅ plan
+         ↓
+      Comment no PR:
+      "Plan: 3 to add, 0 to change, 0 to destroy"
+
+   c) Review
+      You: Lês o plan no PR
+      You: Reviews código
+      You: Approves PR
+
+   d) Merge
+      You: Merge para main
+         ↓
+      GitHub Actions (automático)
+         ↓
+      ✅ terraform apply
+      ✅ Captura outputs
+      ✅ Ansible deploy
+      ✅ Health checks
+         ↓
+      Infrastructure updated + services deployed
+
+═════════════════════════════════════════════════════════════════
+
+📁 FICHEIROS WORKFLOW
+
+.github/workflows/terraform-plan.yml
+└─ Trigger: Pull Request
+└─ Action: fmt -check, validate, plan
+└─ Output: Comment no PR
+└─ Duration: 2-3 min
+
+.github/workflows/terraform-apply.yml
+└─ Trigger: Push para main (path: infra/terraform/**)
+└─ Section 1 - Apply
+   └─ Terraform apply
+   └─ Capture outputs
+└─ Section 2 - Deploy
+   └─ Ansible configure
+   └─ Ansible deploy
+   └─ Health verify
+└─ Duration: 10-12 min
+
+═════════════════════════════════════════════════════════════════
+
+💡 KEY FEATURES
+
+Cache de Providers
+   └─ Terraform providers cached
+   └─ ~50% performance improvement
+
+Validação Multi-Layer
+   └─ Format check
+   └─ Syntax validation
+   └─ Plan preview
+
+Branch Protection
+   └─ Só roda em main
+   └─ PRs bloqueadas se testes falham
+
+Ansible Integration
+   └─ Automático após apply
+   └─ Variáveis injectadas
+   └─ Services deployed
+
+Health Checks
+   └─ 4 endpoints testados
+   └─ Aguarda EC2 ready
+   └─ Deteta failures
+
+═════════════════════════════════════════════════════════════════
+
+❌ O QUE NÃO PODE FAZER
+
+❌ terraform apply manual (use git push instead)
+❌ terraform destroy em produção (use git destory plan)
+❌ Apply em branches que não main (apenas em main)
+❌ Commitar secrets (use GitHub secrets)
+❌ Bypass PR reviews
+
+═════════════════════════════════════════════════════════════════
+
+✅ O QUE FAZER
+
+✅ git push → GitHub Actions cuida do resto
+✅ Review PRs com terraform plan visível
+✅ Merge só quando tudo está verde ✅
+✅ Check GitHub Actions logs se algo falha
+✅ Ask for help if anything goes wrong
+
+═════════════════════════════════════════════════════════════════
+
+📊 COMPARAÇÃO
+
+Manual (antes):
+  terraform plan
+  (Copiar output manualmente)
+  terraform apply
+  (Copy RDS endpoint)
+  ansible-playbook ... --extra-vars "rds=..."
+  (Pray nothing breaks)
+  ⏱️ 30 min + erro humano alto
+
+Automático (depois):
+  git push
+  GitHub Actions cuida de tudo
+  Check resultado em 10 min
+  ✅ Tudo rastreável, reproducível, seguro
+  ⏱️ 10 min + zero erros manuais
+
+═════════════════════════════════════════════════════════════════
+
+🔍 DEBUGGING
+
+Onde ver logs?
+  GitHub → seu repo → Actions tab → Select workflow
+
+Plan falha?
+  Review PR comment com erro específico
+  Fix localmente, git push novamente
+
+Apply falha?
+  Check GitHub Actions logs
+  ssh para EC2, docker compose logs
+
+Health checks falham?
+  Services ainda estão iniciando
+  Aguarda 1-2 min, refresh
+
+═════════════════════════════════════════════════════════════════
+
+📚 LEIA MAIS
+
+Documentação completa:
+→ docs/TERRAFORM_CICD_PIPELINE.md
+
+Para entender mejor:
+→ .github/workflows/terraform-plan.yml (PR workflow code)
+→ .github/workflows/terraform-apply.yml (Main workflow code)
+
+═════════════════════════════════════════════════════════════════
+
+✨ RESULTADO
+
+✅ CI/CD pipeline production-ready
+✅ Git-driven infrastructure
+✅ Zero manual apply
+✅ Full automation + security
+✅ Rastreável & reversível
+✅ Team-friendly
+
+═════════════════════════════════════════════════════════════════
+
